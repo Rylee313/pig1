@@ -1,0 +1,291 @@
+<!DOCTYPE html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://code.jquery.com https://unpkg.com https://d3js.org https://threejs.org https://cdn.plot.ly https://stackpath.bootstrapcdn.com https://maps.googleapis.com https://cdn.tailwindcss.com https://ajax.googleapis.com https://kit.fontawesome.com https://cdn.datatables.net https://maxcdn.bootstrapcdn.com https://code.highcharts.com https://tako-static-assets-production.s3.amazonaws.com https://www.youtube.com https://fonts.googleapis.com https://fonts.gstatic.com https://pfst.cf2.poecdn.net https://i.imgur.com https://wikimedia.org https://*.icons8.com https://*.giphy.com https://picsum.photos https://images.unsplash.com; frame-src 'self' https://www.youtube.com https://trytako.com; child-src 'self'; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests; block-all-mixed-content;">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>猪猪跳跃游戏</title>
+    <style>
+        canvas {
+            border: 2px solid black;
+            display: block;
+            margin: 0 auto;
+            background: linear-gradient(to bottom, #87CEEB, #4A90E2);
+        }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #333;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="1200" height="600"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 游戏角色
+        const player = {
+            x: 50,
+            y: 300,
+            width: 60,  // 增加了尺寸使猪猪更容易看清
+            height: 60,
+            speed: 5,
+            jumpForce: 12,
+            gravity: 0.5,
+            velocityY: 0,
+            isJumping: false,
+            direction: 1
+        };
+
+        // 平台类型定义
+        class Platform {
+            constructor(x, y, width, height, type = 'static', color = '#4ECDC4') {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.type = type;
+                this.color = color;
+                this.initialX = x;
+                this.initialY = y;
+                this.moveSpeed = 2;
+                this.moveRange = 200;
+                this.moveDirection = 1;
+                this.vertical = type === 'vertical';
+            }
+
+            update() {
+                if (this.type === 'horizontal') {
+                    this.x += this.moveSpeed * this.moveDirection;
+                    if (Math.abs(this.x - this.initialX) > this.moveRange) {
+                        this.moveDirection *= -1;
+                    }
+                } else if (this.type === 'vertical') {
+                    this.y += this.moveSpeed * this.moveDirection;
+                    if (Math.abs(this.y - this.initialY) > 100) {
+                        this.moveDirection *= -1;
+                    }
+                }
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                if (this.type !== 'static') {
+                    ctx.fillStyle = '#FFF';
+                    ctx.beginPath();
+                    if (this.type === 'horizontal') {
+                        ctx.moveTo(this.x + this.width/2 - 15, this.y + this.height/2);
+                        ctx.lineTo(this.x + this.width/2 + 15, this.y + this.height/2);
+                        ctx.lineTo(this.x + this.width/2 + (this.moveDirection > 0 ? 5 : -5), this.y + this.height/2 - 5);
+                        ctx.moveTo(this.x + this.width/2 + 15 * (this.moveDirection), this.y + this.height/2);
+                        ctx.lineTo(this.x + this.width/2 + (this.moveDirection > 0 ? 5 : -5), this.y + this.height/2 + 5);
+                    } else if (this.type === 'vertical') {
+                        ctx.moveTo(this.x + this.width/2, this.y + this.height/2 - 15);
+                        ctx.lineTo(this.x + this.width/2, this.y + this.height/2 + 15);
+                        ctx.lineTo(this.x + this.width/2 - 5, this.y + this.height/2 + (this.moveDirection > 0 ? 5 : -5));
+                        ctx.moveTo(this.x + this.width/2, this.y + this.height/2 + 15 * (this.moveDirection));
+                        ctx.lineTo(this.x + this.width/2 + 5, this.y + this.height/2 + (this.moveDirection > 0 ? 5 : -5));
+                    }
+                    ctx.stroke();
+                }
+            }
+        }
+
+        // 创建平台
+        const platforms = [
+            new Platform(0, 550, canvas.width, 50, 'static', '#2C3E50'),
+            new Platform(100, 450, 200, 20),
+            new Platform(400, 400, 150, 20),
+            new Platform(700, 350, 200, 20),
+            new Platform(1000, 300, 150, 20),
+            new Platform(800, 200, 150, 20),
+            new Platform(500, 150, 150, 20),
+            new Platform(200, 250, 150, 20),
+            new Platform(300, 300, 100, 20, 'horizontal', '#E74C3C'),
+            new Platform(600, 250, 100, 20, 'horizontal', '#E74C3C'),
+            new Platform(900, 400, 100, 20, 'vertical', '#F1C40F'),
+            new Platform(100, 200, 100, 20, 'vertical', '#F1C40F')
+        ];
+
+        // 按键状态
+        const keys = {
+            ArrowLeft: false,
+            ArrowRight: false,
+            Space: false
+        };
+
+        // 键盘事件监听
+        document.addEventListener('keydown', (e) => {
+            if (e.code in keys) {
+                keys[e.code] = true;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code in keys) {
+                keys[e.code] = false;
+            }
+        });
+
+        // 碰撞检测
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        // 绘制猪猪函数
+        function drawCharacter(x, y, width, height, direction) {
+            ctx.save();
+            ctx.translate(x + width / 2, y + height / 2);
+            if (direction === -1) {
+                ctx.scale(-1, 1);
+            }
+            
+            // 身体（椭圆形）
+            ctx.beginPath();
+            ctx.fillStyle = '#FFB6C1';
+            ctx.ellipse(0, 0, width/2, height/3, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 头部（圆形）
+            ctx.beginPath();
+            ctx.fillStyle = '#FFB6C1';
+            ctx.arc(width/4, -height/4, width/3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 耳朵
+            ctx.beginPath();
+            ctx.fillStyle = '#FF69B4';
+            ctx.ellipse(width/4 + width/6, -height/3, width/8, height/8, Math.PI/4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 眼睛
+            ctx.beginPath();
+            ctx.fillStyle = '#000000';
+            ctx.arc(width/4 + width/6, -height/4, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 鼻子
+            ctx.beginPath();
+            ctx.fillStyle = '#FF69B4';
+            ctx.arc(width/4 + width/3, -height/4, width/10, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 鼻孔
+            ctx.beginPath();
+            ctx.fillStyle = '#000000';
+            ctx.arc(width/4 + width/3 - 2, -height/4 - 2, 1.5, 0, Math.PI * 2);
+            ctx.arc(width/4 + width/3 + 2, -height/4 - 2, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 獠牙（两根）
+            ctx.beginPath();
+            ctx.fillStyle = '#000000';
+            // 左獠牙
+            ctx.moveTo(width/4 + width/4, -height/4 + height/8);
+            ctx.lineTo(width/4 + width/4 - width/12, -height/4 + height/4);
+            ctx.lineTo(width/4 + width/4 + width/12, -height/4 + height/4);
+            ctx.fill();
+            // 右獠牙
+            ctx.moveTo(width/4 + width/2, -height/4 + height/8);
+            ctx.lineTo(width/4 + width/2 - width/12, -height/4 + height/4);
+            ctx.lineTo(width/4 + width/2 + width/12, -height/4 + height/4);
+            ctx.fill();
+
+            // 腿
+            ctx.fillStyle = '#FFB6C1';
+            ctx.fillRect(-width/6, height/6, width/8, height/3);
+            ctx.fillRect(width/12, height/6, width/8, height/3);
+            ctx.fillRect(-width/3, height/6, width/8, height/3);
+            ctx.fillRect(-width/2, height/6, width/8, height/3);
+
+            // 小卷尾巴
+            ctx.beginPath();
+            ctx.strokeStyle = '#FFB6C1';
+            ctx.lineWidth = 4;
+            ctx.moveTo(-width/2, 0);
+            for(let i = 0; i <= 1; i += 0.1) {
+                ctx.lineTo(
+                    -width/2 - Math.sin(i * 4) * width/8,
+                    i * height/4
+                );
+            }
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+
+        // 更新游戏状态
+        function update() {
+            if (keys.ArrowLeft) {
+                player.x -= player.speed;
+                player.direction = -1;
+            }
+            if (keys.ArrowRight) {
+                player.x += player.speed;
+                player.direction = 1;
+            }
+
+            player.velocityY += player.gravity;
+            player.y += player.velocityY;
+
+            platforms.forEach(platform => platform.update());
+
+            let onPlatform = false;
+            platforms.forEach(platform => {
+                if (checkCollision(player, platform)) {
+                    if (player.y + player.height - player.velocityY <= platform.y) {
+                        player.y = platform.y - player.height;
+                        player.velocityY = 0;
+                        player.isJumping = false;
+                        onPlatform = true;
+
+                        if (platform.type === 'horizontal') {
+                            player.x += platform.moveSpeed * platform.moveDirection;
+                        }
+                    }
+                }
+            });
+
+            if (keys.Space && !player.isJumping) {
+                player.velocityY = -player.jumpForce;
+                player.isJumping = true;
+            }
+
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+            
+            if (player.y > canvas.height) {
+                player.x = 50;
+                player.y = 300;
+                player.velocityY = 0;
+            }
+        }
+
+        // 绘制游戏画面
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            platforms.forEach(platform => platform.draw());
+            drawCharacter(player.x, player.y, player.width, player.height, player.direction);
+        }
+
+        // 游戏循环
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 开始游戏
+        gameLoop();
+    </script>
+
+
+</body></html>
